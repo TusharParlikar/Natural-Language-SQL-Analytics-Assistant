@@ -1,4 +1,4 @@
-anthropic==1.11.0
+openai==3.26.0
 pandas==3.0.6
 sqlglot==30.21.0
 streamlit==1.65.0

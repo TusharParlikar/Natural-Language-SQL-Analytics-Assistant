@@ -1,25 +1,39 @@
+import json
+import os
+import re
 import sqlite3
 import sys
+from pathlib import Path
 
-import anthropic
+from openai import OpenAI
 
 from guard import run_query
 
-DB_PATH = "data/chinook.db"
-MODEL = "claude-opus-5-5"
-MAX_RETRIES = 2  # failed SQL attempts allowed before giving up
+# Load KEY=VALUE lines from .env; real environment variables win.
+_env = Path(__file__).with_name(".env")
+if _env.exists():
+    for line in _env.read_text(encoding="utf-8").splitlines():
+        key, sep, value = line.partition("=")
+        if sep and not key.strip().startswith("#"):
+            os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
 
-RUN_SQL_TOOL = {
+DB_PATH = "data/chinook.db"
+# Any OpenAI-compatible endpoint: Ollama (default), OpenAI, Groq, Together, LM Studio, vLLM, Gemini, Claude...
+BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
+API_KEY = os.environ.get("LLM_API_KEY", "ollama")
+MODEL = os.environ.get("LLM_MODEL", "qwen3:1.7b")
+MAX_RETRIES = 2  # failed SQL attempts allowed before giving up
+MAX_TURNS = 6  # stops a model that keeps calling the tool without answering
+
+RUN_SQL_TOOL = {"type": "function", "function": {
     "name": "run_sql",
     "description": "Run one read-only SQLite SELECT query against the database and get the result rows back as CSV.",
-    "strict": True,
-    "input_schema": {
+    "parameters": {
         "type": "object",
         "properties": {"query": {"type": "string", "description": "A single SQLite SELECT statement."}},
         "required": ["query"],
-        "additionalProperties": False,
     },
-}
+}}
 
 
 def get_schema(db_path=DB_PATH, sample_rows=3):
@@ -55,49 +69,40 @@ Schema:
 _client = None
 
 
+def _clean(text):
+    """Drop <think>...</think> blocks that some local reasoning models put in the reply."""
+    return re.sub(r"<think>.*?</think>", "", text or "", flags=re.S).strip()
+
+
 def ask(question, schema=None, max_retries=MAX_RETRIES):
-    """Question -> {"sql", "df", "answer", "error"} using Claude tool calling."""
+    """Question -> {"sql", "df", "answer", "error"} using OpenAI-compatible tool calling."""
     global _client
-    _client = _client or anthropic.Anthropic()
-    system = system_prompt(schema or get_schema())
-    messages = [{"role": "user", "content": question}]
+    _client = _client or OpenAI(base_url=BASE_URL, api_key=API_KEY)
+    messages = [{"role": "system", "content": system_prompt(schema or get_schema())},
+                {"role": "user", "content": question}]
     sql, df, failures, last_error = None, None, 0, None
 
-    while True:
-        response = _client.beta.messages.create(
-            model=MODEL,
-            max_tokens=16000,
-            output_config={"effort": "medium"},
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            system=system,
-            tools=[RUN_SQL_TOOL],
-            messages=messages,
-        )
-        if response.stop_reason == "refusal":
-            return {"sql": sql, "df": df, "answer": None, "error": "The model declined this request."}
+    for _ in range(MAX_TURNS):
+        msg = _client.chat.completions.create(model=MODEL, messages=messages, tools=[RUN_SQL_TOOL]).choices[0].message
+        if not msg.tool_calls:
+            return {"sql": sql, "df": df, "answer": _clean(msg.content), "error": None}
 
-        tool_uses = [b for b in response.content if b.type == "tool_use"]
-        if not tool_uses:
-            answer = "".join(b.text for b in response.content if b.type == "text")
-            return {"sql": sql, "df": df, "answer": answer, "error": None}
-
-        messages.append({"role": "assistant", "content": response.content})
-        results = []
-        for tu in tool_uses:
+        messages.append(msg.model_dump(exclude_none=True))
+        for call in msg.tool_calls:
             try:
-                result_df = run_query(tu.input["query"])
-                sql, df = tu.input["query"], result_df
+                query = json.loads(call.function.arguments)["query"]
+                result_df = run_query(query)
+                sql, df = query, result_df
                 content = result_df.head(50).to_csv(index=False) or "(no rows)"
-                results.append({"type": "tool_result", "tool_use_id": tu.id, "content": content})
-            except Exception as e:
+            except Exception as e:  # bad tool arguments, guardrail rejection, or SQLite error
                 failures, last_error = failures + 1, str(e)
-                results.append({"type": "tool_result", "tool_use_id": tu.id,
-                                "content": f"Error: {e}", "is_error": True})
+                content = f"Error: {e}"
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
         if failures > max_retries:
             return {"sql": sql, "df": df, "answer": None,
                     "error": f"Query failed after {max_retries} retries: {last_error}"}
-        messages.append({"role": "user", "content": results})
+
+    return {"sql": sql, "df": df, "answer": None, "error": f"No final answer after {MAX_TURNS} model turns."}
 
 
 if __name__ == "__main__":

@@ -43,7 +43,7 @@ Question ──► Schema-aware prompt ──► LLM (function call: run_sql)
 |---|---|
 | Language | Python 3.10+ |
 | Database | SQLite ([Chinook](https://github.com/lerocha/chinook-database) sample DB, 11 tables) |
-| LLM | Claude API, `claude-opus-5-5` (tool use, server-side refusal fallback) |
+| LLM | Any OpenAI-compatible chat API with tool calling (`openai` SDK). Local default: Ollama `qwen3:1.7b` |
 | SQL validation | sqlglot |
 | Data | Pandas |
 | UI | Streamlit |
@@ -70,7 +70,8 @@ cd Natural-Language-SQL-Analytics-Assistant
 python -m venv .venv
 .venv\Scripts\activate             # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-set ANTHROPIC_API_KEY=your-key      # PowerShell: $env:ANTHROPIC_API_KEY="your-key"; macOS/Linux: export ANTHROPIC_API_KEY=your-key
+copy .env.example .env             # macOS/Linux: cp .env.example .env
+ollama pull qwen3:1.7b             # local model (default in .env)
 streamlit run app.py
 ```
 
@@ -80,7 +81,7 @@ Ask a single question from the terminal:
 python assistant.py "Top 5 countries by total revenue"
 ```
 
-Run the checks (no API key needed) and the evaluation:
+Run the checks (no LLM needed) and the evaluation:
 
 ```bash
 python guard.py           # guardrail self-checks
@@ -89,11 +90,21 @@ python eval.py            # execution accuracy, with retry
 python eval.py --no-retry # without retry, for comparison
 ```
 
-To use a different model, change `MODEL` in `assistant.py`.
+### Choosing the LLM
+
+All LLM settings live in `.env`; no code changes are needed. Any provider with an OpenAI-compatible chat completions API and tool calling works:
+
+| Setting | Meaning | Default |
+|---|---|---|
+| `LLM_BASE_URL` | API endpoint | `http://localhost:11434/v1` (Ollama) |
+| `LLM_API_KEY` | Provider key | `ollama` |
+| `LLM_MODEL` | Model name | `qwen3:1.7b` |
+
+`.env.example` has ready-made lines for OpenAI, Groq, Gemini and Claude. Real environment variables override `.env`.
 
 ### Deploy (optional)
 
-On [Streamlit Community Cloud](https://streamlit.io/cloud), point a new app at `app.py` and add `ANTHROPIC_API_KEY = "..."` under **Secrets**. Streamlit makes top-level secrets available as environment variables, which is where the Anthropic client reads the key.
+On [Streamlit Community Cloud](https://streamlit.io/cloud), point a new app at `app.py` and add `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL` for a hosted provider under **Secrets**. Streamlit makes top-level secrets available as environment variables, which is where the app reads them. Ollama on your PC can't be reached from the cloud.
 
 ## Evaluation
 

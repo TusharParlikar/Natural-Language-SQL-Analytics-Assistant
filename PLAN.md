@@ -14,7 +14,7 @@
 - [x] Create a virtual env: `python -m venv .venv`
 - [x] Write `requirements.txt`: `anthropic`, `streamlit`, `pandas`, `sqlglot`
 - [x] Add `.gitignore` (`.venv/`, `__pycache__/`, `.env`)
-- [ ] Get an API key and store it in an env var, never in code
+- [x] LLM settings in `.env` (git-ignored): Ollama `qwen3:1.7b` locally, any OpenAI-compatible provider by editing `.env`
 
 **Done when:** `pip install -r requirements.txt` works and the key loads from the environment.
 
@@ -33,7 +33,7 @@
 
 ---
 
-## Phase 2: Text-to-SQL core with function calling 🟡 (code done, live test pending)
+## Phase 2: Text-to-SQL core with function calling 🟡 (live-tested on Ollama; 10-question check pending)
 
 **Objective:** question in, SQL and a result DataFrame out.
 
@@ -97,7 +97,7 @@
 
 - [ ] Fill in the README results table and add screenshots or a GIF
 - [x] Clean up code comments and pin requirement versions
-- [ ] Optional: deploy to Streamlit Community Cloud with the API key in secrets (steps in README)
+- [ ] Optional: deploy to Streamlit Community Cloud with a hosted provider's settings in secrets (steps in README)
 - [ ] Final commit and push
 
 **Done when:** a stranger can clone the repo, run the app in under 5 minutes and see the accuracy numbers.
