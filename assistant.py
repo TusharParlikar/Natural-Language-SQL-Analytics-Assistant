@@ -24,6 +24,7 @@ DB_PATH = "data/chinook.db"
 BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
 API_KEY = os.environ.get("LLM_API_KEY", "ollama")
 MODEL = os.environ.get("LLM_MODEL", "qwen3:1.7b")
+TIMEOUT_S = float(os.environ.get("LLM_TIMEOUT", "120"))  # per LLM request; slow CPU models may need more
 MAX_RETRIES = 2  # failed SQL attempts allowed before giving up
 MAX_TURNS = 6  # stops a model that keeps calling the tool without answering
 
@@ -118,7 +119,7 @@ def _clean(text):
 def ask(question, schema=None, max_retries=MAX_RETRIES, db_path=DB_PATH):
     """Question -> {"sql", "df", "answer", "error"} using OpenAI-compatible tool calling."""
     global _client
-    _client = _client or OpenAI(base_url=BASE_URL, api_key=API_KEY)
+    _client = _client or OpenAI(base_url=BASE_URL, api_key=API_KEY, timeout=TIMEOUT_S, max_retries=3)  # retries 429 rate limits
     messages = [{"role": "system", "content": system_prompt(schema or get_schema(db_path))},
                 {"role": "user", "content": question}]
     sql, df, failures, last_error = None, None, 0, None
