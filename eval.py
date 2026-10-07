@@ -2,9 +2,12 @@
 
 python eval.py              # full run (with retry)
 python eval.py --no-retry   # same, but no second attempts after a failed query
+python eval.py --limit 8    # quick run on 8 evenly spaced questions (e.g. to compare providers)
 """
 import json
+import math
 import sys
+import time
 from collections import Counter
 
 import assistant
@@ -49,27 +52,35 @@ def results_match(gold, pred):
     return True
 
 
-def main(retries):
+def main(retries, limit=None):
+    sys.stdout.reconfigure(encoding="utf-8")  # model replies can contain non-ASCII (Windows console)
+    print(f"Model: {assistant.MODEL} @ {assistant.BASE_URL}")
     pairs = json.load(open("data/eval_set.json"))
+    if limit:
+        pairs = pairs[::math.ceil(len(pairs) / limit)][:limit]
+    start = time.perf_counter()
     schema = assistant.get_schema()
     per_diff, failures = Counter(), []
     totals = Counter(p["difficulty"] for p in pairs)
     for i, p in enumerate(pairs, 1):
+        t0 = time.perf_counter()
         try:
             r = assistant.ask(p["question"], schema, max_retries=retries)
         except Exception as e:
             r = {"sql": None, "df": None, "error": f"{type(e).__name__}: {e}"}
         ok = results_match(run_query(p["sql"]), r["df"])
         per_diff[p["difficulty"]] += ok
-        print(f"[{i:2}/{len(pairs)}] {'PASS' if ok else 'FAIL'}  {p['question']}")
+        print(f"[{i:2}/{len(pairs)}] {'PASS' if ok else 'FAIL'}  {time.perf_counter() - t0:5.1f}s  {p['question']}")
         if not ok:
             failures.append({**p, "generated_sql": r["sql"], "error": r.get("error")})
 
     print(f"\n{'difficulty':<10} {'correct':>8} {'total':>6} {'accuracy':>9}")
-    for d in ["easy", "medium", "hard"]:
+    for d in [d for d in ["easy", "medium", "hard"] if totals[d]]:
         print(f"{d:<10} {per_diff[d]:>8} {totals[d]:>6} {per_diff[d] / totals[d]:>9.0%}")
     n_ok = sum(per_diff.values())
     print(f"{'overall':<10} {n_ok:>8} {len(pairs):>6} {n_ok / len(pairs):>9.0%}")
+    q_time = time.perf_counter() - start
+    print(f"Time: {q_time / 60:.1f} min for {len(pairs)} questions ({q_time / len(pairs):.1f} s/question)")
 
     before = run_query(COUNT_SQL).iloc[0, 0]
     print("\nUnsafe prompts:")
@@ -82,10 +93,12 @@ def main(retries):
         print(f"  - {q}\n      -> {outcome}")
     unchanged = run_query(COUNT_SQL).iloc[0, 0] == before
     print(f"Database unchanged after unsafe prompts: {'YES' if unchanged else 'NO'}")
+    print(f"Total time: {(time.perf_counter() - start) / 60:.1f} min")
 
     json.dump(failures, open("eval_failures.json", "w"), indent=1, default=str)
     print(f"\n{len(failures)} failures written to eval_failures.json")
 
 
 if __name__ == "__main__":
-    main(retries=0 if "--no-retry" in sys.argv else assistant.MAX_RETRIES)
+    limit = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else None
+    main(retries=0 if "--no-retry" in sys.argv else assistant.MAX_RETRIES, limit=limit)
