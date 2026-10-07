@@ -68,7 +68,7 @@ Question ──► Schema-aware prompt ──► LLM (function call: run_sql)
 git clone https://github.com/TusharParlikar/Natural-Language-SQL-Analytics-Assistant.git
 cd Natural-Language-SQL-Analytics-Assistant
 python -m venv .venv
-.venv\Scriptsctivate             # macOS/Linux: source .venv/bin/activate
+.venv\Scripts\activate             # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 set ANTHROPIC_API_KEY=your-key      # PowerShell: $env:ANTHROPIC_API_KEY="your-key"; macOS/Linux: export ANTHROPIC_API_KEY=your-key
 streamlit run app.py
