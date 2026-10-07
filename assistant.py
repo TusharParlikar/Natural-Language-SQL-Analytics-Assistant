@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import re
@@ -5,6 +6,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import pandas as pd
 from openai import OpenAI
 
 from guard import run_query
@@ -49,11 +51,50 @@ def get_schema(db_path=DB_PATH, sample_rows=3):
                for fk in conn.execute(f'PRAGMA foreign_key_list("{t}")')]
         cur = conn.execute(f'SELECT * FROM "{t}" LIMIT {sample_rows}')
         header = " | ".join(d[0] for d in cur.description)
-        rows = "\n".join(" | ".join(map(str, r)) for r in cur.fetchall())
+        rows = "\n".join(" | ".join(str(v)[:50] for v in r) for r in cur.fetchall())  # cap long text
         parts.append(f"CREATE TABLE {t} (\n" + ",\n".join(cols + fks) + "\n);\n"
                      f"/* sample rows:\n{header}\n{rows}\n*/")
     conn.close()
     return "\n\n".join(parts)
+
+
+def _identifier(name, fallback):
+    """Turn a file, sheet or column name into a plain SQL name: 'Sales 2024' -> sales_2024."""
+    name = re.sub(r"\W+", "_", str(name)).strip("_").lower() or fallback
+    return f"t_{name}" if name[0].isdigit() else name
+
+
+def is_sqlite(data):
+    return data[:16] == b"SQLite format 3\x00"
+
+
+def files_to_sqlite(files, db_path):
+    """Load uploaded (filename, bytes) pairs into a new SQLite DB: each CSV and each Excel sheet
+    becomes one table. Returns the table names."""
+    frames = {}
+    for filename, data in files:
+        stem, ext = os.path.splitext(filename.lower())
+        if ext == ".csv":
+            frames[_identifier(stem, "data")] = pd.read_csv(io.BytesIO(data))
+        elif ext in (".xlsx", ".xls"):
+            sheets = pd.read_excel(io.BytesIO(data), sheet_name=None)
+            for sheet, df in sheets.items():
+                frames[_identifier(stem if len(sheets) == 1 else f"{stem}_{sheet}", "sheet")] = df
+        else:
+            raise ValueError(f"Unsupported file type: {filename}")
+    conn = sqlite3.connect(db_path)
+    try:
+        for table, df in frames.items():
+            seen, cols = {}, []
+            for i, c in enumerate(df.columns, 1):
+                c = _identifier(c, f"col{i}")
+                seen[c] = seen.get(c, 0) + 1
+                cols.append(c if seen[c] == 1 else f"{c}_{seen[c]}")
+            df.columns = cols
+            df.to_sql(table, conn, index=False, if_exists="replace")
+    finally:
+        conn.close()
+    return list(frames)
 
 
 def system_prompt(schema):
@@ -74,11 +115,11 @@ def _clean(text):
     return re.sub(r"<think>.*?</think>", "", text or "", flags=re.S).strip()
 
 
-def ask(question, schema=None, max_retries=MAX_RETRIES):
+def ask(question, schema=None, max_retries=MAX_RETRIES, db_path=DB_PATH):
     """Question -> {"sql", "df", "answer", "error"} using OpenAI-compatible tool calling."""
     global _client
     _client = _client or OpenAI(base_url=BASE_URL, api_key=API_KEY)
-    messages = [{"role": "system", "content": system_prompt(schema or get_schema())},
+    messages = [{"role": "system", "content": system_prompt(schema or get_schema(db_path))},
                 {"role": "user", "content": question}]
     sql, df, failures, last_error = None, None, 0, None
 
@@ -91,7 +132,7 @@ def ask(question, schema=None, max_retries=MAX_RETRIES):
         for call in msg.tool_calls:
             try:
                 query = json.loads(call.function.arguments)["query"]
-                result_df = run_query(query)
+                result_df = run_query(query, db_path)
                 sql, df = query, result_df
                 content = result_df.head(50).to_csv(index=False) or "(no rows)"
             except Exception as e:  # bad tool arguments, guardrail rejection, or SQLite error

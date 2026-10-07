@@ -104,6 +104,20 @@
 
 ---
 
+## Phase 7: Bring your own data ✅
+
+**Objective:** let users ask questions about their own files, not only the sample database.
+
+- [x] Sidebar choice: sample database or upload
+- [x] Upload CSV (one table per file), Excel (one table per sheet) or a single SQLite file (used as-is)
+- [x] Clean file, sheet and column names into plain SQL names, and de-duplicate them
+- [x] Same guardrails on uploaded data (read-only, validated, limited)
+- [x] `ARCHITECTURE.md` describing inputs, outputs and data flow
+
+**Done when:** a user uploads a CSV and gets a correct answer to "total sales by region" (verified live on Ollama `qwen3:1.7b`).
+
+---
+
 ## Timeline (suggested)
 
 | Phase | Effort |
@@ -120,7 +134,7 @@
 
 ## Out of scope (add later if needed)
 
-- Multiple databases or uploading your own DB
+- Querying several databases at once
 - Postgres/MySQL support
 - Conversation memory and follow-up questions
 - Users and authentication
