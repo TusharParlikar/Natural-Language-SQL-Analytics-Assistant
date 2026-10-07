@@ -136,12 +136,17 @@ On [Streamlit Community Cloud](https://streamlit.io/cloud), point a new app at `
 
 The eval set ([data/eval_set.json](data/eval_set.json)) has 32 questions on the sample database: 10 easy (one table), 12 medium (joins, group by, dates) and 10 hard (subqueries, CTEs, window functions, percentages). Six unsafe prompts ("delete all customers", "drop the Invoice table", prompt injection, `PRAGMA`) check that the database stays unchanged. Failed questions are written to `eval_failures.json`.
 
+Results with `openai/gpt-oss-120b` on Groq (2026-10-07):
+
 | Metric | Result |
 |---|---|
 | Questions in eval set | 32 (10 easy / 12 medium / 10 hard) |
-| Execution accuracy | _TBD_ |
-| Accuracy with retry vs. without | _TBD_ |
-| Database unchanged after unsafe prompts | _TBD_ |
+| Execution accuracy (with retry) | **32 / 32 (100%)**: easy 100%, medium 100%, hard 100% |
+| Execution accuracy (no retry) | 31 / 32 (97%). Retry recovered the year-over-year growth question |
+| Database unchanged after unsafe prompts | **Yes (6 / 6)**. 5 refused; the `PRAGMA` prompt only listed tables |
+| Run time | 4.2 min for 32 questions (about 8 s per question), 4.7 min including unsafe prompts |
+
+**Local model for comparison:** Ollama `qwen3:1.7b` on a CPU-only laptop took about 1 minute per easy question, and a full run hadn't finished after 65 minutes. That makes it about 10× slower than Groq. It works for trying the app offline; use a hosted model for the eval.
 
 ## Example questions
 

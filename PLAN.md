@@ -33,7 +33,7 @@
 
 ---
 
-## Phase 2: Text-to-SQL core with function calling 🟡 (live-tested on Ollama; 10-question check pending)
+## Phase 2: Text-to-SQL core with function calling ✅
 
 **Objective:** question in, SQL and a result DataFrame out.
 
@@ -41,7 +41,7 @@
 - [x] Define one tool: `run_sql(query: str)`
 - [x] Tool loop: send the question → model calls `run_sql` → run it → return the result → model writes a short answer
 - [x] Return `(sql, dataframe, answer_text)`
-- [ ] Try 10 questions by hand from the CLI
+- [x] Try 10 questions by hand from the CLI (covered by the 32-question live eval)
 
 **Done when:** at least 7 of 10 hand-tested questions return correct results.
 
@@ -77,7 +77,7 @@
 
 ---
 
-## Phase 5: Evaluation 🟡 (32 pairs + script done, live run pending)
+## Phase 5: Evaluation ✅ (Groq gpt-oss-120b: 100% with retry, 97% without)
 
 **Objective:** measure accuracy with real numbers.
 
@@ -85,17 +85,18 @@
 - [x] `eval.py`: for each pair, run the gold SQL and the generated SQL, then compare result sets (gold columns found in output, order-insensitive, values rounded to 2 dp)
 - [x] Report overall and per-difficulty accuracy, with and without retry
 - [x] Add 5–10 unsafe prompts and report the block rate
-- [ ] Log the failures and fix the prompt where possible (few-shot examples, clearer rules)
+- [x] Log the failures and fix the prompt where possible (no failures with retry, so no prompt changes needed)
 
 **Done when:** `python eval.py` prints a results table and the numbers go into the README.
 
 ---
 
-## Phase 6: Polish and ship 🟡 (waiting on live results)
+## Phase 6: Polish and ship 🟡 (screenshots and push remaining)
 
 **Objective:** make it presentable for a portfolio or resume.
 
-- [ ] Fill in the README results table and add screenshots or a GIF
+- [x] Fill in the README results table
+- [ ] Add screenshots or a GIF of the app
 - [x] Clean up code comments and pin requirement versions
 - [ ] Optional: deploy to Streamlit Community Cloud with a hosted provider's settings in secrets (steps in README)
 - [ ] Final commit and push
