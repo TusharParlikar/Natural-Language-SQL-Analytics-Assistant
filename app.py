@@ -1,3 +1,4 @@
+import hmac
 import os
 import shutil
 
@@ -16,6 +17,7 @@ EXAMPLES = [
 ]
 UPLOAD_TYPES = ["csv", "xlsx", "xls", "db", "sqlite", "sqlite3"]
 STORE = "data/store"  # saved databases; kept across restarts on your own machine or server
+MODIFY_PASSWORD = os.environ.get("MODIFY_PASSWORD", "")  # set on a public deploy so visitors cannot change data
 
 
 def chart_spec(df):
@@ -105,6 +107,11 @@ st.set_page_config(page_title="SQL Analytics Assistant", page_icon="📊", layou
 title_col, modify_col = st.columns([5, 1], vertical_alignment="bottom")
 title_col.title("Natural-Language SQL Analytics Assistant")
 modify = modify_col.toggle("Modify", help="Turn on to upload, edit or delete data. Off = view only.")
+if modify and MODIFY_PASSWORD:
+    pw = modify_col.text_input("Password", type="password")
+    modify = hmac.compare_digest(pw.encode(), MODIFY_PASSWORD.encode())
+    if pw and not modify:
+        modify_col.error("Wrong password")
 
 with st.sidebar:
     names = stored_dbs()
