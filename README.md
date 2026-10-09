@@ -74,8 +74,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design, with inputs, outputs
 │   └── eval_set.json   # 32 hand-written question–SQL pairs
 ├── .env.example        # LLM settings template (copy to .env)
 ├── requirements.txt
-├── ARCHITECTURE.md     # how it works in detail
-└── PLAN.md             # phased build plan
+└── ARCHITECTURE.md     # how it works in detail
 ```
 
 ## Quick start
@@ -172,4 +171,7 @@ Your own data, for example a sales CSV:
 
 ## Roadmap
 
-See [PLAN.md](PLAN.md).
+- Querying several databases at once
+- Postgres/MySQL support
+- Conversation memory and follow-up questions
+- Users and authentication
