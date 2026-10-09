@@ -4,7 +4,6 @@ import os
 import re
 import sqlite3
 import sys
-from contextlib import closing
 from pathlib import Path
 
 import pandas as pd
@@ -99,37 +98,6 @@ def files_to_sqlite(files, db_path):
     return list(frames)
 
 
-def table_names(db_path):
-    with closing(sqlite3.connect(db_path)) as conn:
-        return [r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-
-
-def load_table(db_path, table):
-    with closing(sqlite3.connect(db_path)) as conn:
-        return pd.read_sql(f'SELECT * FROM "{table}"', conn)
-
-
-def save_table(db_path, table, df):
-    """Replace a table's rows with df, keeping its column types and keys. Used for user edits, never by the LLM."""
-    conn = sqlite3.connect(db_path)
-    try:
-        with conn:  # one transaction: all rows saved or none
-            conn.execute(f'DELETE FROM "{table}"')
-            df.to_sql(table, conn, index=False, if_exists="append")
-    finally:
-        conn.close()
-
-
-def drop_table(db_path, table):
-    conn = sqlite3.connect(db_path)
-    try:
-        with conn:
-            conn.execute(f'DROP TABLE "{table}"')
-    finally:
-        conn.close()
-
-
 def system_prompt(schema):
     return f"""You are a data analyst answering business questions about a SQLite database.
 
@@ -190,14 +158,3 @@ if __name__ == "__main__":
         assert "FOREIGN KEY (CustomerId) REFERENCES Customer(CustomerId)" in s
         print(s)
         print(f"\n{len(s)} chars")
-
-        # edit helpers: upload -> edit -> save -> drop, on a temp DB
-        import tempfile
-        tmp = os.path.join(tempfile.mkdtemp(), "t.db")
-        files_to_sqlite([("Sales Data.csv", b"Region,Amount\nEast,10\nWest,20\n")], tmp)
-        df = load_table(tmp, "sales_data")
-        save_table(tmp, "sales_data", df[df.region != "East"])
-        assert load_table(tmp, "sales_data").to_dict("records") == [{"region": "West", "amount": 20}]
-        drop_table(tmp, "sales_data")
-        assert table_names(tmp) == []
-        print("edit helpers OK")
