@@ -68,13 +68,17 @@ def schema(db_path):
     return get_schema(db_path)
 
 
-def data_tab(db_path):
-    """Edit, add and delete rows of a table, or delete the whole table. The LLM stays read-only."""
+def data_tab(db_path, modify):
+    """Browse tables; in Modify mode also edit, add and delete rows or delete a table. The LLM stays read-only."""
     tables = table_names(db_path)
     if not tables:
         st.info("This database has no tables left.")
         return
     table = st.selectbox("Table", tables)
+    if not modify:
+        st.caption("Turn on **Modify** at the top to change the data.")
+        st.dataframe(load_table(db_path, table), width="stretch", hide_index=True)
+        return
     ver = st.session_state.get("edit_ver", 0)  # bumped on save so the editor reloads from the DB
     st.caption("Click a cell to edit it. Add rows at the bottom; select rows by their left edge and press Delete to remove them.")
     # ponytail: loads the whole table into the browser; page it if uploads get very large
@@ -98,7 +102,9 @@ def data_tab(db_path):
 
 
 st.set_page_config(page_title="SQL Analytics Assistant", page_icon="📊", layout="wide")
-st.title("Natural-Language SQL Analytics Assistant")
+title_col, modify_col = st.columns([5, 1], vertical_alignment="bottom")
+title_col.title("Natural-Language SQL Analytics Assistant")
+modify = modify_col.toggle("Modify", help="Turn on to upload, edit or delete data. Off = view only.")
 
 with st.sidebar:
     names = stored_dbs()
@@ -112,22 +118,23 @@ with st.sidebar:
     with open(db_path, "rb") as fh:
         st.download_button("Download database", fh.read(), file_name=f"{db}.db", width="stretch",
                            help="Keep a copy of your data, e.g. before the server restarts.")
-    files = st.file_uploader("Add a database from CSV, Excel or SQLite files", type=UPLOAD_TYPES,
-                             accept_multiple_files=True, help="Each CSV file and each Excel sheet becomes one table.")
-    if files:
-        key = tuple((f.name, f.size) for f in files)
-        if st.session_state.get("upload_key") != key:
-            st.session_state.upload_key = key
-            try:
-                st.session_state.pending_db = save_upload(files)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Could not load the files: {e}")
-    if st.button("Reset sample database" if sample else f"Delete database {db}", width="stretch"):
-        os.remove(db_path)
-        st.session_state.edit_ver = st.session_state.get("edit_ver", 0) + 1
-        schema.clear()
-        st.rerun()
+    if modify:
+        files = st.file_uploader("Add a database from CSV, Excel or SQLite files", type=UPLOAD_TYPES,
+                                 accept_multiple_files=True, help="Each CSV file and each Excel sheet becomes one table.")
+        if files:
+            key = tuple((f.name, f.size) for f in files)
+            if st.session_state.get("upload_key") != key:
+                st.session_state.upload_key = key
+                try:
+                    st.session_state.pending_db = save_upload(files)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Could not load the files: {e}")
+        if st.button("Reset sample database" if sample else f"Delete database {db}", width="stretch"):
+            os.remove(db_path)
+            st.session_state.edit_ver = st.session_state.get("edit_ver", 0) + 1
+            schema.clear()
+            st.rerun()
     if sample:
         st.subheader("Example questions")
         for q in EXAMPLES:
@@ -136,9 +143,9 @@ with st.sidebar:
     with st.expander("Database schema"):
         st.code(schema(db_path), language="sql")
 
-ask_tab, tab = st.tabs(["Ask a question", "Edit data"])
+ask_tab, tab = st.tabs(["Ask a question", "Data"])
 with tab:
-    data_tab(db_path)
+    data_tab(db_path, modify)
 
 with ask_tab:
     st.caption("Ask a business question about " + ("the Chinook music store database." if sample else "your uploaded data."))
