@@ -4,6 +4,7 @@ import os
 import re
 import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
 
 import pandas as pd
@@ -96,6 +97,37 @@ def files_to_sqlite(files, db_path):
     finally:
         conn.close()
     return list(frames)
+
+
+def table_names(db_path):
+    with closing(sqlite3.connect(db_path)) as conn:
+        return [r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+
+
+def load_table(db_path, table):
+    with closing(sqlite3.connect(db_path)) as conn:
+        return pd.read_sql(f'SELECT * FROM "{table}"', conn)
+
+
+def save_table(db_path, table, df):
+    """Replace a table's rows with df, keeping its column types and keys. Used for user edits, never by the LLM."""
+    conn = sqlite3.connect(db_path)
+    try:
+        with conn:  # one transaction: all rows saved or none
+            conn.execute(f'DELETE FROM "{table}"')
+            df.to_sql(table, conn, index=False, if_exists="append")
+    finally:
+        conn.close()
+
+
+def drop_table(db_path, table):
+    conn = sqlite3.connect(db_path)
+    try:
+        with conn:
+            conn.execute(f'DROP TABLE "{table}"')
+    finally:
+        conn.close()
 
 
 def system_prompt(schema):
