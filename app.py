@@ -86,10 +86,12 @@ if not db_path:
     st.stop()
 
 st.caption("Ask a business question about " + ("the Chinook music store database." if db_path == DB_PATH else "your uploaded data."))
-question = st.text_input("Your question", key="question",
-                         placeholder=EXAMPLES[0] if db_path == DB_PATH else "e.g. Total sales by region")
+with st.form("ask_form", border=False):  # a form submits on Enter
+    question = st.text_input("Your question", key="question",
+                             placeholder=EXAMPLES[0] if db_path == DB_PATH else "e.g. Total sales by region")
+    submitted = st.form_submit_button("Ask", type="primary")
 
-if st.button("Ask", type="primary") and question.strip():
+if submitted and question.strip():
     with st.spinner("Writing and running SQL..."):
         try:
             r = ask(question, schema(db_path), db_path=db_path)
