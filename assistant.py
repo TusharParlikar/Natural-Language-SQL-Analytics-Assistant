@@ -148,6 +148,7 @@ def ask(question, schema=None, max_retries=MAX_RETRIES, db_path=DB_PATH):
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")  # model replies can contain non-ASCII (Windows console)
     if len(sys.argv) > 1:  # python assistant.py "your question"
         r = ask(" ".join(sys.argv[1:]))
         print("SQL:", r["sql"], "\n", r["df"], "\n\n", r["answer"] or r["error"], sep="")
