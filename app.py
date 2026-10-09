@@ -4,7 +4,14 @@ import tempfile
 import pandas as pd
 import streamlit as st
 
-from assistant import DB_PATH, ask, files_to_sqlite, get_schema, is_sqlite
+# Streamlit Cloud secrets -> environment, before assistant reads its LLM settings
+try:
+    for k, v in st.secrets.items():
+        os.environ.setdefault(k, str(v))
+except FileNotFoundError:  # no secrets file: running locally with .env
+    pass
+
+from assistant import BASE_URL, DB_PATH, ask, files_to_sqlite, get_schema, is_sqlite  # noqa: E402
 
 EXAMPLES = [
     "What are the top 10 best-selling tracks by revenue?",
@@ -96,7 +103,7 @@ if submitted and question.strip():
         try:
             r = ask(question, schema(db_path), db_path=db_path)
         except Exception as e:  # API key, network, rate limits
-            r = {"sql": None, "df": None, "answer": None, "error": f"{type(e).__name__}: {e}"}
+            r = {"sql": None, "df": None, "answer": None, "error": f"{type(e).__name__}: {e} (LLM server: {BASE_URL})"}
 
     if r["error"]:
         st.error(r["error"])
