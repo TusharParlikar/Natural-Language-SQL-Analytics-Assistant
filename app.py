@@ -109,6 +109,9 @@ with st.sidebar:
     db = st.selectbox("Database", names, key="db")
     db_path = f"{STORE}/{db}.db"
     sample = db == "chinook"
+    with open(db_path, "rb") as fh:
+        st.download_button("Download database", fh.read(), file_name=f"{db}.db", width="stretch",
+                           help="Keep a copy of your data, e.g. before the server restarts.")
     files = st.file_uploader("Add a database from CSV, Excel or SQLite files", type=UPLOAD_TYPES,
                              accept_multiple_files=True, help="Each CSV file and each Excel sheet becomes one table.")
     if files:
@@ -120,6 +123,11 @@ with st.sidebar:
                 st.rerun()
             except Exception as e:
                 st.error(f"Could not load the files: {e}")
+    if st.button("Reset sample database" if sample else f"Delete database {db}", width="stretch"):
+        os.remove(db_path)
+        st.session_state.edit_ver = st.session_state.get("edit_ver", 0) + 1
+        schema.clear()
+        st.rerun()
     if sample:
         st.subheader("Example questions")
         for q in EXAMPLES:
