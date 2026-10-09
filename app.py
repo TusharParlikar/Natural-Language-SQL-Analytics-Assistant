@@ -4,7 +4,8 @@ import shutil
 import pandas as pd
 import streamlit as st
 
-from assistant import DB_PATH, _identifier, ask, files_to_sqlite, get_schema, is_sqlite
+from assistant import (DB_PATH, _identifier, ask, drop_table, files_to_sqlite, get_schema, is_sqlite, load_table,
+                       save_table, table_names)
 
 EXAMPLES = [
     "What are the top 10 best-selling tracks by revenue?",
@@ -67,6 +68,35 @@ def schema(db_path):
     return get_schema(db_path)
 
 
+def data_tab(db_path):
+    """Edit, add and delete rows of a table, or delete the whole table. The LLM stays read-only."""
+    tables = table_names(db_path)
+    if not tables:
+        st.info("This database has no tables left.")
+        return
+    table = st.selectbox("Table", tables)
+    ver = st.session_state.get("edit_ver", 0)  # bumped on save so the editor reloads from the DB
+    st.caption("Click a cell to edit it. Add rows at the bottom; select rows by their left edge and press Delete to remove them.")
+    # ponytail: loads the whole table into the browser; page it if uploads get very large
+    edited = st.data_editor(load_table(db_path, table), num_rows="dynamic", width="stretch", hide_index=True,
+                            key=f"edit_{db_path}_{table}_{ver}")
+    col1, col2 = st.columns([1, 5])
+    if col1.button("Save changes", type="primary"):
+        try:
+            save_table(db_path, table, edited)
+        except Exception as e:
+            st.error(f"Could not save: {e}")
+        else:
+            st.session_state.edit_ver = ver + 1
+            schema.clear()
+            st.rerun()
+    if col2.button(f"Delete table {table}"):
+        drop_table(db_path, table)
+        st.session_state.edit_ver = ver + 1
+        schema.clear()
+        st.rerun()
+
+
 st.set_page_config(page_title="SQL Analytics Assistant", page_icon="📊", layout="wide")
 st.title("Natural-Language SQL Analytics Assistant")
 
@@ -98,30 +128,35 @@ with st.sidebar:
     with st.expander("Database schema"):
         st.code(schema(db_path), language="sql")
 
-st.caption("Ask a business question about " + ("the Chinook music store database." if sample else "your uploaded data."))
-question = st.text_input("Your question", key="question",
-                         placeholder=EXAMPLES[0] if sample else "e.g. Total sales by region")
+ask_tab, tab = st.tabs(["Ask a question", "Edit data"])
+with tab:
+    data_tab(db_path)
 
-if st.button("Ask", type="primary") and question.strip():
-    with st.spinner("Writing and running SQL..."):
-        try:
-            r = ask(question, schema(db_path), db_path=db_path)
-        except Exception as e:  # API key, network, rate limits
-            r = {"sql": None, "df": None, "answer": None, "error": f"{type(e).__name__}: {e}"}
+with ask_tab:
+    st.caption("Ask a business question about " + ("the Chinook music store database." if sample else "your uploaded data."))
+    question = st.text_input("Your question", key="question",
+                             placeholder=EXAMPLES[0] if sample else "e.g. Total sales by region")
 
-    if r["error"]:
-        st.error(r["error"])
-    elif r["answer"]:
-        st.success(r["answer"])
+    if st.button("Ask", type="primary") and question.strip():
+        with st.spinner("Writing and running SQL..."):
+            try:
+                r = ask(question, schema(db_path), db_path=db_path)
+            except Exception as e:  # API key, network, rate limits
+                r = {"sql": None, "df": None, "answer": None, "error": f"{type(e).__name__}: {e}"}
 
-    df = r["df"]
-    if df is not None:
-        spec = chart_spec(df)
-        if spec and spec[0] == "line":
-            st.line_chart(df, x=spec[1], y=spec[2])
-        elif spec:
-            st.bar_chart(df.head(50), x=spec[1], y=spec[2], sort=False)
-        st.dataframe(df, width="stretch", hide_index=True)
-    if r["sql"]:
-        with st.expander("Generated SQL"):
-            st.code(r["sql"], language="sql")
+        if r["error"]:
+            st.error(r["error"])
+        elif r["answer"]:
+            st.success(r["answer"])
+
+        df = r["df"]
+        if df is not None:
+            spec = chart_spec(df)
+            if spec and spec[0] == "line":
+                st.line_chart(df, x=spec[1], y=spec[2])
+            elif spec:
+                st.bar_chart(df.head(50), x=spec[1], y=spec[2], sort=False)
+            st.dataframe(df, width="stretch", hide_index=True)
+        if r["sql"]:
+            with st.expander("Generated SQL"):
+                st.code(r["sql"], language="sql")
