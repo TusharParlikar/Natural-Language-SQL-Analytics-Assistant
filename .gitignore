@@ -5,4 +5,3 @@ eval_failures.json
 DEPLOY.md
 Dockerfile
 .dockerignore
-data/store/
