@@ -190,3 +190,14 @@ if __name__ == "__main__":
         assert "FOREIGN KEY (CustomerId) REFERENCES Customer(CustomerId)" in s
         print(s)
         print(f"\n{len(s)} chars")
+
+        # edit helpers: upload -> edit -> save -> drop, on a temp DB
+        import tempfile
+        tmp = os.path.join(tempfile.mkdtemp(), "t.db")
+        files_to_sqlite([("Sales Data.csv", b"Region,Amount\nEast,10\nWest,20\n")], tmp)
+        df = load_table(tmp, "sales_data")
+        save_table(tmp, "sales_data", df[df.region != "East"])
+        assert load_table(tmp, "sales_data").to_dict("records") == [{"region": "West", "amount": 20}]
+        drop_table(tmp, "sales_data")
+        assert table_names(tmp) == []
+        print("edit helpers OK")
