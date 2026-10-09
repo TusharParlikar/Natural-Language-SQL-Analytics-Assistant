@@ -1,10 +1,10 @@
 import os
-import tempfile
+import shutil
 
 import pandas as pd
 import streamlit as st
 
-from assistant import DB_PATH, ask, files_to_sqlite, get_schema, is_sqlite
+from assistant import DB_PATH, _identifier, ask, files_to_sqlite, get_schema, is_sqlite
 
 EXAMPLES = [
     "What are the top 10 best-selling tracks by revenue?",
@@ -14,6 +14,7 @@ EXAMPLES = [
     "Average invoice value per country, highest first",
 ]
 UPLOAD_TYPES = ["csv", "xlsx", "xls", "db", "sqlite", "sqlite3"]
+STORE = "data/store"  # saved databases; kept across restarts on your own machine or server
 
 
 def chart_spec(df):
@@ -28,22 +29,37 @@ def chart_spec(df):
     return "bar", x, num[0]
 
 
-def build_upload_db(files):
-    """Turn uploaded files into a SQLite DB path. A SQLite file is used as-is; CSV/Excel are converted.
+def stored_dbs():
+    """Names of the saved databases. The Chinook sample is copied in on first run, and again if it is deleted."""
+    os.makedirs(STORE, exist_ok=True)
+    if not os.path.exists(f"{STORE}/chinook.db"):
+        shutil.copyfile(DB_PATH, f"{STORE}/chinook.db")
+    return sorted(f[:-3] for f in os.listdir(STORE) if f.endswith(".db"))
 
-    ponytail: temp files are never deleted; add cleanup if the app runs long-term on a server.
-    """
+
+def save_upload(files):
+    """Store uploaded files as a new database and return its name. A SQLite file is kept as-is; CSV/Excel are converted."""
     data = [(f.name, f.getvalue()) for f in files]
-    path = os.path.join(tempfile.mkdtemp(prefix="nlsql_"), "upload.db")
     sqlite_files = [d for d in data if is_sqlite(d[1])]
-    if sqlite_files:
-        if len(data) > 1:
-            raise ValueError("Upload a SQLite database on its own, or only CSV/Excel files.")
-        with open(path, "wb") as fh:
-            fh.write(sqlite_files[0][1])
-    else:
-        files_to_sqlite(data, path)
-    return path
+    if sqlite_files and len(data) > 1:
+        raise ValueError("Upload a SQLite database on its own, or only CSV/Excel files.")
+    base = _identifier(os.path.splitext(files[0].name)[0], "data")
+    name, n = base, 1
+    while os.path.exists(f"{STORE}/{name}.db"):  # never overwrite a saved database
+        n += 1
+        name = f"{base}_{n}"
+    path = f"{STORE}/{name}.db"
+    try:
+        if sqlite_files:
+            with open(path, "wb") as fh:
+                fh.write(sqlite_files[0][1])
+        else:
+            files_to_sqlite(data, path)
+    except Exception:
+        if os.path.exists(path):
+            os.remove(path)
+        raise
+    return name
 
 
 @st.cache_data
@@ -55,39 +71,36 @@ st.set_page_config(page_title="SQL Analytics Assistant", page_icon="📊", layou
 st.title("Natural-Language SQL Analytics Assistant")
 
 with st.sidebar:
-    source = st.radio("Data source", ["Sample: Chinook music store", "Upload my own data"])
-    if source.startswith("Sample"):
-        db_path = DB_PATH
+    names = stored_dbs()
+    if "pending_db" in st.session_state:  # a new upload: select it (must happen before the selectbox is drawn)
+        st.session_state.db = st.session_state.pop("pending_db")
+    if st.session_state.get("db") not in names:
+        st.session_state.db = "chinook"
+    db = st.selectbox("Database", names, key="db")
+    db_path = f"{STORE}/{db}.db"
+    sample = db == "chinook"
+    files = st.file_uploader("Add a database from CSV, Excel or SQLite files", type=UPLOAD_TYPES,
+                             accept_multiple_files=True, help="Each CSV file and each Excel sheet becomes one table.")
+    if files:
+        key = tuple((f.name, f.size) for f in files)
+        if st.session_state.get("upload_key") != key:
+            st.session_state.upload_key = key
+            try:
+                st.session_state.pending_db = save_upload(files)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Could not load the files: {e}")
+    if sample:
         st.subheader("Example questions")
         for q in EXAMPLES:
             if st.button(q, width="stretch"):
                 st.session_state.question = q
-    else:
-        files = st.file_uploader("CSV, Excel or SQLite files", type=UPLOAD_TYPES, accept_multiple_files=True,
-                                 help="Each CSV file and each Excel sheet becomes one table.")
-        db_path = None
-        if files:
-            key = tuple((f.name, f.size) for f in files)
-            if st.session_state.get("upload_key") != key:
-                try:
-                    st.session_state.upload_db = build_upload_db(files)
-                    st.session_state.upload_key = key
-                except Exception as e:
-                    st.session_state.upload_key = None
-                    st.error(f"Could not load the files: {e}")
-            if st.session_state.get("upload_key") == key:
-                db_path = st.session_state.upload_db
-    if db_path:
-        with st.expander("Database schema"):
-            st.code(schema(db_path), language="sql")
+    with st.expander("Database schema"):
+        st.code(schema(db_path), language="sql")
 
-if not db_path:
-    st.info("Upload one or more CSV or Excel files, or a SQLite database, in the sidebar to start asking questions.")
-    st.stop()
-
-st.caption("Ask a business question about " + ("the Chinook music store database." if db_path == DB_PATH else "your uploaded data."))
+st.caption("Ask a business question about " + ("the Chinook music store database." if sample else "your uploaded data."))
 question = st.text_input("Your question", key="question",
-                         placeholder=EXAMPLES[0] if db_path == DB_PATH else "e.g. Total sales by region")
+                         placeholder=EXAMPLES[0] if sample else "e.g. Total sales by region")
 
 if st.button("Ask", type="primary") and question.strip():
     with st.spinner("Writing and running SQL..."):
