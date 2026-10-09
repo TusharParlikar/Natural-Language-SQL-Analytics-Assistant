@@ -24,6 +24,7 @@ Make a multi-table database usable by people who don't know SQL. The assistant s
   - **Sample:** the [Chinook](https://github.com/lerocha/chinook-database) music-store database (11 related tables)
   - **Upload:** CSV files, Excel workbooks (each sheet becomes a table) or a SQLite database file
 - Read-only guardrails: SQL validation, read-only connection, row limit, timeout
+- Saved databases: uploads and edits are stored in `data/store/` and kept across restarts. The **Modify** switch (optionally password-protected) unlocks uploading, editing cells, adding or deleting rows, and deleting tables. The AI stays read-only, and the original sample file is never changed
 - Self-correction: SQL errors go back to the model, which can retry up to 2 times
 - Runs locally on Ollama (`qwen3:1.7b` by default), or on OpenAI, Groq, Gemini, Claude or any other OpenAI-compatible API
 - Evaluation script with 32 question–SQL pairs and an unsafe-prompt check
