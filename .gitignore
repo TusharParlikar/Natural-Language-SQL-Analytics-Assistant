@@ -2,6 +2,4 @@
 __pycache__/
 .env
 eval_failures.json
-DEPLOY.md
-Dockerfile
-.dockerignore
+interview.md
