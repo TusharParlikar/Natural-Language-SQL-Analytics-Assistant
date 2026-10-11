@@ -2,6 +2,8 @@
 
 Ask business questions in plain English and get answers from a SQL database, shown as tables and charts. Use the built-in sample database, or **upload your own CSV, Excel or SQLite files**.
 
+**Live demo:** <https://natural-language-sql-analytics-assistant.streamlit.app/>
+
 > "Which 5 countries brought in the most revenue?" → SQL → answer + bar chart + table
 
 ## Aim
